@@ -305,5 +305,3 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     time_taken = end_time - start_time
 
     return (opt_val, selected_edges, selected_cycles, time_taken)
-
-
