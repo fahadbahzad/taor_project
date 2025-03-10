@@ -1,7 +1,7 @@
 import networkx as nx
 import pandas as pd
 
-def get_data(file, pc_tsp):
+def get_data(file, max_cycle=3, pc_tsp=False):
     '''
     Inputs:
     file: a string containing the filename for the compatability information. Of the form 'Data.xlsx'.
@@ -61,16 +61,19 @@ def get_data(file, pc_tsp):
 
         # Get cycles
         # Create cycles dictionary
-        cycles = sorted(nx.simple_cycles(G, length_bound=3))
+        cycles = sorted(nx.simple_cycles(G, length_bound=max_cycle))
 
-        # Very particular output to make sure we can turn it into a dictionary
-        with open("output.txt", "w") as f: 
-            for cycle in cycles:
-                print(",".join(map(str, cycle)), file=f)
+        # # Very particular output to make sure we can turn it into a dictionary
+        # with open("output.txt", "w") as f: 
+        #     for cycle in cycles:
+        #         print(",".join(map(str, cycle)), file=f)
 
-        # Read the file and convert each line into a tuple
-        with open("output.txt", "r") as f:
-            cycles = [tuple(map(float, line.strip().split(","))) for line in f if line.strip()]
+        # # Read the file and convert each line into a tuple
+        # with open("output.txt", "r") as f:
+        #     cycles = [tuple(map(float, line.strip().split(","))) for line in f if line.strip()]
+
+        cycles = [tuple(map(float, cycle)) for cycle in cycles]
+
 
         # Convert list of tuples into a dictionary (no weights yet)
         cycles_dict = {i: cycle for i, cycle in enumerate(cycles)}
@@ -93,7 +96,15 @@ def get_data(file, pc_tsp):
         # Create dictionary with cycles and weights
         all_cycles = {tuple(cycle): get_cycle_weight(cycle, edges) for cycle in cycles_dict.values()}
 
-    else:
-        all_cycles = []
+        # Filter out all cycles of length 2 i.e., edges
+        all_cycles = {key: value for key, value in all_cycles.items() if len(key) != 2}
+        
+        super_source = "SUPER"
+        G.add_node(super_source)
+        for u in altruistic_donors:
+            G.add_edge(super_source, u, weight=1)
 
-    return(pairs, altruistic_donors, nodes, edges, all_cycles)
+        return(G, pairs, altruistic_donors, nodes, edges, all_cycles)
+
+    else:
+        return(pairs, altruistic_donors, nodes, edges)
