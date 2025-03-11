@@ -180,9 +180,9 @@ def separation_cboptnode(prob, data):
         # Now we add the translated cut
         prob.addcuts(
                             cuttype=[1],  # General cut
-                            rowtype=['G'],  # Presolved row type are we sure??
+                            rowtype=['G'],  # Presolved row type
                             rhs=[drhsp],  # Presolved RHS
-                            start=[0, len(colind)],  # Start indices what does this do? 
+                            start=[0, len(colind)],  # Start indices
                             colind=colind,  # Presolved column indices
                             cutcoef=rowcoef  # Presolved coefficients
                     )
@@ -293,6 +293,9 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     model.addcboptnode(separation_cboptnode, None, 1)
 
     model.controls.outputlog = noisy # Toggle the output
+    model.setControl("MIPRELSTOP", 0.1)
+    model.setControl("maxtime", 1200)
+
 
     # Solve the model
     start_time = time.time()
