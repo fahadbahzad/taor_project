@@ -304,4 +304,6 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     selected_cycles = [c for c in all_cycles if model.getSolution(z[c]) > 0.05]
     time_taken = end_time - start_time
 
+    print(model.getProbStatusString())
+    
     return (opt_val, selected_edges, selected_cycles, time_taken)
