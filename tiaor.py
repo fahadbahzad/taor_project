@@ -22,15 +22,22 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
             of pairs or of altruistic_donors; values are the weights of the
             directed edge from the 0th entry to 1st entry of the tuple.
         k (int): max cycle length allowed in the optimal solution.
-        noisy (int): determines how much to print as output during optimization.
+        noisy (int): determines how much to print as output during optimization:
+            0 - switch off ALL printed output
+            1 - switch off solver output log; report finding feasible solutions
+            2 - show all printed output
         scenarios (list of dictionaries): 
 
 
     Returns:
-        opt_val
-        solution_edges (dict):
-        time_taken (float):
-
+        opt_val (float): value of the optimal solution; if scenarios==None this
+            value is NOT calculated stochastically, otherwise it is computed
+            as the expected value against all provided scenarios.
+        solution_edges (list): a list of edges in the optimal solution
+        time_taken (float): time taken for the optimization (excl.)
+        VSS (float): value of the stochastic solution; None if scenarios==None
+        opt_sol (dict): keys are edges, value is 1 if included in optimal
+            solution and 0 if not.
     """
 
 
@@ -55,6 +62,10 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
 
 
     if scenarios:
+
+        # First solve the problem deterministically, finding the edge selections
+        # This is used in calculating the value of the stochastic solution
+        _, _, _, _, y_D = ra(pairs, altruistic_donors, edges,k,noisy=0,scenarios=None)
 
         # Define decision variables for second stage (after node deletion)
         x = {(e,s) : xp.var(vartype=xp.binary, name=f"x_{e[0]}_{e[1]}_{s}") 
@@ -96,9 +107,6 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
         prob.controls.outputlog = 0 # This just makes it quiet to run
 
     Gstart_time = time.time()
-
-
-    # prob.solve()
 
     while finished == False and infeasible == False:
         
@@ -154,11 +162,15 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
         # Add the constraint to remove this as an option: 
         prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(max_cycle)-1)
 
-
+    opt_sol = prob.getSolution(y)
+    opt_val = prob.getObjVal()
+    
     solution_edges = [e for e in edges if prob.getSolution(y[e]) > 0.05]
 
+    time_taken = time.time()-Gstart_time
+
     if not noisy in [0]:
-        print(f"The optimization took {time.time() - Gstart_time} seconds to execute.")
+        print(f"The optimization took {time_taken} seconds to execute.")
 
         # Print the output
         print("")
@@ -171,16 +183,29 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
         #         print(f"{u} donates to {v} with benefit {edges[(u,v)]}")
 
 
-        print(f"Total Benefit: {prob.getObjVal()}")
+        print(f"Total Benefit: {opt_val}")
         print("")
         print("")
         print("")
 
-    return prob.getObjVal(), solution_edges
+    if scenarios:
+        if not noisy in [0,1]: print("Calculating VSS...")
+        prob.addConstraint(x[e,s]<=y_D[e] for e in edges for s, _ in enumerate(scenarios))
+        prob.solve()
+        val_det_sol = prob.getObjVal()
+        VSS = opt_val - val_det_sol
+        print(f"Expected value of DETERMINISTIC solution: {val_det_sol}")
+        print(f"Expected value of STOCHASTIC solution: {opt_val}")
+        print(f"VSS: {VSS}")
+    else: VSS = None
+
+    return opt_val, solution_edges, time_taken, VSS, opt_sol
 
 
 def get_S(edges, deleted_nodes):
-    ''' Takes edges and deleted_nodes, returns S encoding which edges survive.
+    ''' 
+    Takes edges and deleted_nodes, returns S encoding which edges survive.
+    
     S is a dictionary: the keys are the edges of the compatibility graph.
     S[e] is 1 if the edge e survives the deletion of nodes and 0 otherwise.
     '''
@@ -221,13 +246,48 @@ def generate_simple_scenarios(pairs, altruistic_donors, edges):
 
 
 def generate_probabilistic_scenarios(pairs, altruistic_donors, edges, N, P_dropout_pairs, P_dropout_altruistic):
+    ''' Return N scenarios based on a probabilities of nodes dropping out.
     
+    Args:
+        pairs: list
+        altruistic_donors: list
+        edges: dictionary (keys: 2-tuple (in/out vx); values: weight of edge)
+        N: number of scenarios to generate
+        P_dropout_pairs: (fixed) probability that a pair drops out
+        P_dropout_altruistic: (fixed) probability that an NDD drops out
+
+    Returns:
+        scenarios: a list of dictionaries. Each dictionary is a scenario; in
+            each dictionary, keys are edges, value is 1 if edge survives else 0.
+    '''
+
     scenarios = []
 
     for i in range(N):
         deleted_nodes = [pair for pair in pairs if np.random.uniform() <= P_dropout_pairs] +\
                 [NDD for NDD in altruistic_donors if np.random.uniform() <= P_dropout_altruistic]
         S = get_S(edges, deleted_nodes)
+        scenarios.append(S)
+
+    return scenarios
+
+def generate_edge_dropout_scenarios(edges, N, P_edge_dropout):
+    ''' Return N scenarios based on edge dropout probability P_edge_dropout.
+    
+    Args:
+        edges: dictionary (keys: 2-tuple (in/out vx); values: weight of edge)
+        N: number of scenarios to generate
+        P_edge_dropout: (fixed) probability that an edge drops out
+
+    Returns:
+        scenarios: a list of dictionaries. Each dictionary is a scenario; in
+            each dictionary, keys are edges, value is 1 if edge survives else 0.
+    '''
+    
+    scenarios = []
+
+    for i in range(N):
+        S = {e : 0 if np.random.uniform() <= P_edge_dropout else 1 for e in edges}
         scenarios.append(S)
 
     return scenarios
