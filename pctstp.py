@@ -221,6 +221,7 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     model = xp.problem()
 
     # Decision variables
+    global y, z, f_i, f_o  # Declare the variables as global to be accessible
     y = {e: xp.var(vartype=xp.binary, name=f"y_{e}") for e in edges}  # Edge selection
     z = {c: xp.var(vartype=xp.binary, name=f"z_{c}") for c in all_cycles}  # Cycle selection
     f_i = {v: xp.var(vartype=xp.binary) for v in nodes}  # Flow in decision variable
@@ -294,7 +295,7 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
 
     model.controls.outputlog = noisy # Toggle the output
     model.setControl("MIPRELSTOP", 0.1)
-    model.setControl("maxtime", 1200)
+    model.setControl("maxtime", 600)
 
     # Solve the model
     start_time = time.time()
@@ -306,6 +307,6 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     selected_cycles = [c for c in all_cycles if model.getSolution(z[c]) > 0.05]
     time_taken = end_time - start_time
 
-    print(model.getProbStatusString())
+    # print(model.getProbStatusString())
     
     return (opt_val, selected_edges, selected_cycles, time_taken)
