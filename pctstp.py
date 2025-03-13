@@ -294,7 +294,7 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     model.addcboptnode(separation_cboptnode, None, 1)
 
     model.controls.outputlog = noisy # Toggle the output
-    model.setControl("MIPRELSTOP", 0.1)
+    model.setControl("MIPRELSTOP", 0.01)
     model.setControl("maxtime", 600)
 
     # Solve the model
