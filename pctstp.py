@@ -296,7 +296,6 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     model.setControl("MIPRELSTOP", 0.1)
     model.setControl("maxtime", 1200)
 
-
     # Solve the model
     start_time = time.time()
     model.solve()
