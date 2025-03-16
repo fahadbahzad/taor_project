@@ -47,7 +47,8 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
     # Initialize the model
     prob = xp.problem()
     
-    if scenarios: prob.controls.miprelstop=gap
+    if scenarios: 
+        prob.controls.miprelstop=gap
 
     # Define decision variables for each edge
     y = {e: xp.var(vartype=xp.binary, name=f"y_{e[0]}_{e[1]}") for e in edges}
@@ -155,13 +156,19 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
                 print("#################################################################")
                 print("")
 
-        # Take the long cycle we found and make a note of its edges:
-        max_cycle = max(cycles,key=len)
-        cycle_edges = [(max_cycle[i],max_cycle[i+1]) for i in range(len(max_cycle)-1)]
-        cycle_edges += [(max_cycle[-1],max_cycle[0])]
+        # # Take the long cycle we found and make a note of its edges:
+        # max_cycle = max(cycles,key=len)
+        # cycle_edges = [(max_cycle[i],max_cycle[i+1]) for i in range(len(max_cycle)-1)]
+        # cycle_edges += [(max_cycle[-1],max_cycle[0])]
 
-        # Add the constraint to remove this as an option: 
-        prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(max_cycle)-1)
+        # # Add the constraint to remove this as an option: 
+        # prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(max_cycle)-1)
+
+        for cycle in cycles:
+            if len(cycle)>k:
+                cycle_edges = [(cycle[i],cycle[i+1]) for i in range(len(cycle)-1)]
+                cycle_edges += [(cycle[-1],cycle[0])]
+                prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(cycle)-1)
 
     opt_sol = prob.getSolution(y)
     opt_val = prob.getObjVal()
@@ -189,20 +196,19 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
         print("")
         print("")
 
-    # SWITCH ON VSS CALCULATION HERE:
-    # if scenarios:
-    #     if not noisy in [0,1]: print("Calculating VSS...")
-    #     prob.addConstraint(x[e,s]<=y_D[e] for e in edges for s, _ in enumerate(scenarios))
-    #     prob.solve()
-    #     val_det_sol = prob.getObjVal()
-    #     VSS = opt_val - val_det_sol
-    #     if not noisy in [0,1]:
-    #         print(f"Expected value of DETERMINISTIC solution: {val_det_sol}")
-    #         print(f"Expected value of STOCHASTIC solution: {opt_val}")
-    #         print(f"VSS: {VSS}")
-    # else: VSS = None
+    if scenarios:
+        if not noisy in [0,1]: print("Calculating VSS...")
+        prob.addConstraint(x[e,s]<=y_D[e] for e in edges for s, _ in enumerate(scenarios))
+        prob.solve()
+        val_det_sol = prob.getObjVal()
+        VSS = opt_val - val_det_sol
+        if not noisy in [0]:
+            print(f"Expected value of DETERMINISTIC solution: {val_det_sol}")
+            print(f"Expected value of STOCHASTIC solution: {opt_val}")
+            print(f"VSS: {VSS}")
+    else: VSS = None
 
-    VSS = None
+    # VSS = None
 
     return opt_val, solution_edges, time_taken, VSS, opt_sol
 
