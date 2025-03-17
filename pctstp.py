@@ -19,8 +19,8 @@ def separation_algorithm(y, f_i):
     """
     
     # Get the global Graph object from Networkx of the current problem.
-    # Note: Although this is not best practice, it is more efficient rather 
-    #       than creating the graph every single iteration. 
+    # Note: Although this is not best practice, it is more computationally 
+    #       efficient rather than creating the graph every single iteration. 
     G = globals().get("G", None)
     
     # Add edges with weights from y (solution values)
@@ -72,14 +72,14 @@ def separation_cbpreintsol(prob, data, soltype, cutoff):
     
     # Initialisze outputs:
     ifreject = 0
-    newcutoff = None # Note: this is not being used currently, we will potentially explore it in extensions
+    newcutoff = None # This is irrelevant for our type of callback but is needed by the solver
     
     # Get LP relaxation solution
     lp_solution = []
     prob.getlpsol(lp_solution, None, None, None)
 
     # Populate values from lp_solution using iteration which should be faster as it is just an O(1) process.
-    # Note: we could stop at f_i_temp if it gets too slow. 
+    # Note: We stop at f_i_temp to be computationally efficient
 
     solution_iter = iter(lp_solution)
 
@@ -105,9 +105,8 @@ def separation_cbpreintsol(prob, data, soltype, cutoff):
         ifreject = 1
         
         # There is a violated constraint so return 1/True i.e., reject this solution
-        # Note: From the research I've found the purpose of this callback is to just reject solutions
-        #       and not to add constraints to the problem dynamically. This is particularly relevant
-        #       for Andrew's part because he'll probably have to do it recursively outside the solver. 
+        # Note: The purpose of this callback is to just reject solutions that come up during heuristics
+        #       of the solver before branch-and-bound. 
             
     # Otherwise, return 0/False i.e., this solution does not violate a constraint so its good!
     return(ifreject, newcutoff)
@@ -173,8 +172,8 @@ def separation_cboptnode(prob, data):
                                                origcolind = [prob.getIndex(y[e]) for e in delta_minus_S] + [prob.getIndex(f_i[v])], # Index values of original variables
                                                origrowcoef = [1] * len(delta_minus_S) + [-1], # Coefficients for original variables
                                                origrhs = 0, # Right-hand side of constraint in original variables
-                                               maxcoefs=prob.attributes.cols, # what does this do?
-                                               colind=colind, rowcoef=rowcoef # where to output the new ones
+                                               maxcoefs=prob.attributes.cols, # Standard for adding cuts
+                                               colind=colind, rowcoef=rowcoef # Location of the translated cut
                                         ) 
     
         # Now we add the translated cut
@@ -182,7 +181,7 @@ def separation_cboptnode(prob, data):
                             cuttype=[1],  # General cut
                             rowtype=['G'],  # Presolved row type
                             rhs=[drhsp],  # Presolved RHS
-                            start=[0, len(colind)],  # Start indices
+                            start=[0, len(colind)],  # Start indices for the cut
                             colind=colind,  # Presolved column indices
                             cutcoef=rowcoef  # Presolved coefficients
                     )
@@ -212,8 +211,8 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     time_taken:            The total time taken to solve the problem.
     """
 
-
-
+    # Note: We create a global object to be more computationally efficient rather than recreating the 
+    #       graph every time when it is being called by the callback.  
     global G
     G = graph
 
@@ -221,7 +220,7 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     model = xp.problem()
 
     # Decision variables
-    global y, z, f_i, f_o  # Declare the variables as global to be accessible
+    global y, z, f_i, f_o  # Declare the variables as global to be accessible by callbacks
     y = {e: xp.var(vartype=xp.binary, name=f"y_{e}") for e in edges}  # Edge selection
     z = {c: xp.var(vartype=xp.binary, name=f"z_{c}") for c in all_cycles}  # Cycle selection
     f_i = {v: xp.var(vartype=xp.binary) for v in nodes}  # Flow in decision variable
@@ -230,11 +229,9 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     # Add decision variables
     model.addVariable(list(y.values()) + list(z.values())+ list(f_i.values()) + list(f_o.values()))
 
-
-
-    # Xpress uses indexing when in callback thats why we need to create a dictionary for the ids. I suspect when you run this on actual data
-    # you would want to do this in another code cell just so that it isn't repeated every time you solve the model for debugging. 
-    # e.g., id_vars[("y", ('NDD1', 'P1') )] = 0 i.e., the decision variable to connect nodes NDD1 and P1 is the first decision variable in Xpress.
+    # Xpress uses indexing when in callback thats why we need to create a dictionary for the ids.  
+    # Example: id_vars[("y", ('NDD1', 'P1') )] = 0 i.e., the decision variable to connect nodes 
+    #          NDD1 and P1 is the first decision variable in Xpress.
 
     # Initialize id_vars dictionary and counter to assign sequential values
     id_vars = {}
@@ -263,7 +260,7 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
 
 
     # Create temporary storage for the callback solutions to be used:
-    global y_temp, z_temp, f_i_temp, f_o_temp  # Declare the variables as global to make it more
+    global y_temp, z_temp, f_i_temp, f_o_temp  # Declare the variables as global to make it accessible by the callbacks efficiently
     y_temp = {e: 0 for e in edges}
     z_temp = {c: 0 for c in all_cycles} 
     f_i_temp = {v: 0 for v in nodes}  
@@ -293,20 +290,21 @@ def pctsp(graph:object, pairs:list, altruistic_donors:list, nodes:list, edges:di
     model.addcbpreintsol(separation_cbpreintsol, None, 3)  
     model.addcboptnode(separation_cboptnode, None, 1)
 
+    # Customize the controls of of the solver depending on preferences
     model.controls.outputlog = noisy # Toggle the output
     model.setControl("MIPRELSTOP", 0.01)
-    model.setControl("maxtime", 1200)
+    model.setControl("maxtime", 600)
+    # model.setControl("PRESOLVE",0)
 
     # Solve the model
     start_time = time.time()
     model.solve()
     end_time = time.time()
 
+    # Extract outputs required
     opt_val = model.getObjVal()
     selected_edges = [e for e in edges if model.getSolution(y[e]) > 0.05]
     selected_cycles = [c for c in all_cycles if model.getSolution(z[c]) > 0.05]
     time_taken = end_time - start_time
-
-    # print(model.getProbStatusString())
     
     return (opt_val, selected_edges, selected_cycles, time_taken)
