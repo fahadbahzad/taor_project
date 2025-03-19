@@ -12,7 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, scenarios=None):
+def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1,
+       scenarios=None, gap=0.01, maxtime=1200, add_multiple_constraints=False):
     """ Implements the recursive algorithm from Anderson et al. 2015.
     
     Args:
@@ -26,7 +27,14 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
             0 - switch off ALL printed output
             1 - switch off solver output log; report finding feasible solutions
             2 - show all printed output
-        scenarios (list of dictionaries): 
+        scenarios (list of dictionaries): Each dictionary is a scenario; in
+            each dictionary, keys are edges, value is 1 if edge survives else 0.
+        gap (float): relative MIP gap at which to terminate solver calls.
+        maxtime (float): maxtime to allow for each solver call (in seconds).
+        add_multiple_constraints (boolean): if True, adapts algorithm to rule
+            out all excessively long cycles found in each complete solver run,
+            rather than just the longest. (Useful for increasing the speed of
+            the algorithm in the stochastic case.)
 
 
     Returns:
@@ -46,7 +54,9 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
     # Create Xpress Model
     # Initialize the model
     prob = xp.problem()
-
+    
+    if scenarios: 
+        prob.controls.miprelstop=gap
 
     # Define decision variables for each edge
     y = {e: xp.var(vartype=xp.binary, name=f"y_{e[0]}_{e[1]}") for e in edges}
@@ -99,19 +109,13 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
 
 
     finished = False # A flag to mark the end of the optimization.
-    infeasible = False # A (currently unused) flag to mark no feasible solution.
-    # TODO: Add a catch for no feasible solution. This shouldn't happen but it is
-    # probably better to be robust about this.
 
     if noisy in [0,1]:
         prob.controls.outputlog = 0 # This just makes it quiet to run
 
-        prob.setControl("MIPRELSTOP", 0.01)
-        prob.setControl("maxtime", 1200)
-
     Gstart_time = time.time()
 
-    while finished == False and infeasible == False:
+    while finished == False:
         
 
         start_time = time.time()
@@ -137,7 +141,6 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
         start_time = time.time()
 
         # If ok, report done.
-        # TODO: Rewrite this so that it is with the max_cycle bit...
         if cycles==[] or max(map(len,cycles))<=k:
             if not noisy == 0:
                 print("")
@@ -157,13 +160,22 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
                 print("#################################################################")
                 print("")
 
-        # Take the long cycle we found and make a note of its edges:
-        max_cycle = max(cycles,key=len)
-        cycle_edges = [(max_cycle[i],max_cycle[i+1]) for i in range(len(max_cycle)-1)]
-        cycle_edges += [(max_cycle[-1],max_cycle[0])]
+        if not add_multiple_constraints:
+            # Take the long cycle we found and make a note of its edges:
+            max_cycle = max(cycles,key=len)
+            cycle_edges = [(max_cycle[i],max_cycle[i+1]) for i in range(len(max_cycle)-1)]
+            cycle_edges += [(max_cycle[-1],max_cycle[0])]
 
-        # Add the constraint to remove this as an option: 
-        prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(max_cycle)-1)
+            # Add the constraint to remove this as an option: 
+            prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(max_cycle)-1)
+        
+        else:
+            # If we have determined to do so, eliminate multiple cycles at once:
+            for cycle in cycles:
+                if len(cycle)>k:
+                    cycle_edges = [(cycle[i],cycle[i+1]) for i in range(len(cycle)-1)]
+                    cycle_edges += [(cycle[-1],cycle[0])]
+                    prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(cycle)-1)
 
     opt_sol = prob.getSolution(y)
     opt_val = prob.getObjVal()
@@ -179,13 +191,6 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
         print("")
         print("")
         print("")
-
-        # print("Optimal Matches:")
-        # for (u, v), var in y.items():
-        #     if prob.getSolution(var) > 0.5:
-        #         print(f"{u} donates to {v} with benefit {edges[(u,v)]}")
-
-
         print(f"Total Benefit: {opt_val}")
         print("")
         print("")
@@ -193,13 +198,16 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
 
     if scenarios:
         if not noisy in [0,1]: print("Calculating VSS...")
+        # To get the VSS, evaluate the solution of the deterministic problem
+        # against the scenarios.
         prob.addConstraint(x[e,s]<=y_D[e] for e in edges for s, _ in enumerate(scenarios))
         prob.solve()
         val_det_sol = prob.getObjVal()
         VSS = opt_val - val_det_sol
-        print(f"Expected value of DETERMINISTIC solution: {val_det_sol}")
-        print(f"Expected value of STOCHASTIC solution: {opt_val}")
-        print(f"VSS: {VSS}")
+        if not noisy in [0]:
+            print(f"Expected value of DETERMINISTIC solution: {val_det_sol}")
+            print(f"Expected value of STOCHASTIC solution: {opt_val}")
+            print(f"VSS: {VSS}")
     else: VSS = None
 
     return opt_val, solution_edges, time_taken, VSS, opt_sol
@@ -213,6 +221,7 @@ def get_S(edges, deleted_nodes):
     S[e] is 1 if the edge e survives the deletion of nodes and 0 otherwise.
     '''
     
+    # An edge remains after pruning only if the nodes at each end has remains:
     S = {e : 0 if e[0] in deleted_nodes or e[1] in deleted_nodes else 1 for e in edges}
     return S
 
@@ -248,7 +257,8 @@ def generate_simple_scenarios(pairs, altruistic_donors, edges):
     return scenarios
 
 
-def generate_probabilistic_scenarios(pairs, altruistic_donors, edges, N, P_dropout_pairs, P_dropout_altruistic):
+def generate_probabilistic_scenarios(pairs, altruistic_donors, edges, N, 
+                                     P_dropout_pairs, P_dropout_altruistic):
     ''' Return N scenarios based on a probabilities of nodes dropping out.
     
     Args:
@@ -267,6 +277,8 @@ def generate_probabilistic_scenarios(pairs, altruistic_donors, edges, N, P_dropo
     scenarios = []
 
     for i in range(N):
+        # Delete pairs and NDDs at the appropriate rate and use get_S() to
+        # determine which edges survive this:
         deleted_nodes = [pair for pair in pairs if np.random.uniform() <= P_dropout_pairs] +\
                 [NDD for NDD in altruistic_donors if np.random.uniform() <= P_dropout_altruistic]
         S = get_S(edges, deleted_nodes)
@@ -290,6 +302,7 @@ def generate_edge_dropout_scenarios(edges, N, P_edge_dropout):
     scenarios = []
 
     for i in range(N):
+        # In each scenario, each edge is 'deleted' with probability P_edge_dropout:
         S = {e : 0 if np.random.uniform() <= P_edge_dropout else 1 for e in edges}
         scenarios.append(S)
 

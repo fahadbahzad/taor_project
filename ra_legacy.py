@@ -1,5 +1,5 @@
-# THIS MODULE CONTAINS THE CODE FOR RUNNING STOCHASTIC ALGORITHMS.
-# Currently this only contains a stochastic implementation of the recursive alg.
+# This module contains the code for running the recursive algorithm. It can 
+# handle both the deterministic and stochastic versions of the kidney problem.
 
 # IMPORTS
 import xpress as xp
@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, scenarios=None, gap=0.1):
+def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, scenarios=None):
     """ Implements the recursive algorithm from Anderson et al. 2015.
     
     Args:
@@ -40,21 +40,20 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
             solution and 0 if not.
     """
 
-
+    # Create nodes
     nodes = pairs + altruistic_donors
 
-    # Create Xpress Model
+    # CREATE XPRESS MODEL
+    # -------------------
     # Initialize the model
     prob = xp.problem()
-    
-    if scenarios: 
-        prob.controls.miprelstop=gap
+
 
     # Define decision variables for each edge
     y = {e: xp.var(vartype=xp.binary, name=f"y_{e[0]}_{e[1]}") for e in edges}
     prob.addVariable(list(y.values()))
 
-    # FIRST STAGE constraints
+    # First stage constraints
     for v in pairs:
         prob.addConstraint(xp.Sum(y[e] for e in edges if e[0] == v) <= xp.Sum(y[e] for e in edges if e[1] == v))
         prob.addConstraint(xp.Sum(y[e] for e in edges if e[1] == v) <= 1)
@@ -75,7 +74,7 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
 
         prob.addVariable(list(x.values()))
 
-        # SECOND STAGE constraints:
+        # Second stage constraints:
         for v in pairs:
             for s, _ in enumerate(scenarios):
                 prob.addConstraint(xp.Sum(x[(e,s)] for e in edges if e[0] == v) <= xp.Sum(x[e,s] for e in edges if e[1] == v))
@@ -97,20 +96,19 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
 
     # Objective: Maximize total benefit
     prob.setObjective(objective, sense=xp.maximize)
-
+    prob.setControl("MIPRELSTOP", 0.01)
+    prob.setControl("maxtime", 1200)
 
 
     finished = False # A flag to mark the end of the optimization.
-    infeasible = False # A (currently unused) flag to mark no feasible solution.
-    # TODO: Add a catch for no feasible solution. This shouldn't happen but it is
-    # probably better to be robust about this.
 
     if noisy in [0,1]:
         prob.controls.outputlog = 0 # This just makes it quiet to run
 
+
     Gstart_time = time.time()
 
-    while finished == False and infeasible == False:
+    while finished == False:
         
 
         start_time = time.time()
@@ -156,19 +154,13 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
                 print("#################################################################")
                 print("")
 
-        # # Take the long cycle we found and make a note of its edges:
-        # max_cycle = max(cycles,key=len)
-        # cycle_edges = [(max_cycle[i],max_cycle[i+1]) for i in range(len(max_cycle)-1)]
-        # cycle_edges += [(max_cycle[-1],max_cycle[0])]
+        # Take the long cycle we found and make a note of its edges:
+        max_cycle = max(cycles,key=len)
+        cycle_edges = [(max_cycle[i],max_cycle[i+1]) for i in range(len(max_cycle)-1)]
+        cycle_edges += [(max_cycle[-1],max_cycle[0])]
 
-        # # Add the constraint to remove this as an option: 
-        # prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(max_cycle)-1)
-
-        for cycle in cycles:
-            if len(cycle)>k:
-                cycle_edges = [(cycle[i],cycle[i+1]) for i in range(len(cycle)-1)]
-                cycle_edges += [(cycle[-1],cycle[0])]
-                prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(cycle)-1)
+        # Add the constraint to remove this as an option: 
+        prob.addConstraint(xp.Sum(y[e] for e in cycle_edges) <= len(max_cycle)-1)
 
     opt_sol = prob.getSolution(y)
     opt_val = prob.getObjVal()
@@ -202,13 +194,10 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
         prob.solve()
         val_det_sol = prob.getObjVal()
         VSS = opt_val - val_det_sol
-        if not noisy in [0]:
-            print(f"Expected value of DETERMINISTIC solution: {val_det_sol}")
-            print(f"Expected value of STOCHASTIC solution: {opt_val}")
-            print(f"VSS: {VSS}")
+        print(f"Expected value of DETERMINISTIC solution: {val_det_sol}")
+        print(f"Expected value of STOCHASTIC solution: {opt_val}")
+        print(f"VSS: {VSS}")
     else: VSS = None
-
-    # VSS = None
 
     return opt_val, solution_edges, time_taken, VSS, opt_sol
 
