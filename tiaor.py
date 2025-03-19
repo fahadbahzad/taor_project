@@ -106,6 +106,9 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1, sce
     if noisy in [0,1]:
         prob.controls.outputlog = 0 # This just makes it quiet to run
 
+        prob.setControl("MIPRELSTOP", 0.01)
+        prob.setControl("maxtime", 1200)
+
     Gstart_time = time.time()
 
     while finished == False and infeasible == False:
