@@ -52,11 +52,18 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1,
     nodes = pairs + altruistic_donors
 
     # Create Xpress Model
-    # Initialize the model
+    # Initialize the model and set some stopping conditions:
     prob = xp.problem()
+
+    # set a maxtime, if provided
+    if not maxtime is None:
+        prob.setControl("maxtime", maxtime)
+
+    if noisy in [0,1]:
+        prob.controls.outputlog = 0 # This just makes it quiet to run
     
-    if scenarios: 
-        prob.controls.miprelstop=gap
+    # Set the MIP gap at which to stop.
+    prob.controls.miprelstop=gap
 
     # Define decision variables for each edge
     y = {e: xp.var(vartype=xp.binary, name=f"y_{e[0]}_{e[1]}") for e in edges}
@@ -75,7 +82,7 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1,
 
         # First solve the problem deterministically, finding the edge selections
         # This is used in calculating the value of the stochastic solution
-        _, _, _, _, y_D = ra(pairs, altruistic_donors, edges,k,noisy=0,scenarios=None)
+        _, _, _, _, y_D = ra(pairs, altruistic_donors, edges,k,noisy=0,scenarios=None,maxtime=None)
 
         # Define decision variables for second stage (after node deletion)
         x = {(e,s) : xp.var(vartype=xp.binary, name=f"x_{e[0]}_{e[1]}_{s}") 
@@ -107,11 +114,7 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1,
     prob.setObjective(objective, sense=xp.maximize)
 
 
-
     finished = False # A flag to mark the end of the optimization.
-
-    if noisy in [0,1]:
-        prob.controls.outputlog = 0 # This just makes it quiet to run
 
     Gstart_time = time.time()
 
