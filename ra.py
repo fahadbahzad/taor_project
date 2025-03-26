@@ -120,18 +120,11 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1,
 
     while finished == False:
         
-        # TODO: delete these timings that aren't used.
-        start_time = time.time()
-
-
         # Solve the model
         
         prob.solve()
         opt_sol = prob.getSolution()
         
-        # print(f"Solver took {time.time()-start_time} seconds to run")
-        start_time = time.time()
-
         # Construct the graph from the optimal solution:
         DG = nx.DiGraph()
         selected_edges = [list(edges.keys())[i] for i, e in enumerate(list(edges.keys())) if opt_sol[i]>0.5]
@@ -140,9 +133,6 @@ def ra(pairs:list, altruistic_donors:list, edges:dict, k:int=3, noisy:int=1,
         # Check if there is a cycle length that is too long:
         cycles = list(nx.simple_cycles(DG))
         
-        # print(f"Finding the cycles took {time.time()-start_time} seconds")
-        start_time = time.time()
-
         # If ok, report done.
         if cycles==[] or max(map(len,cycles))<=k:
             if not noisy == 0:
