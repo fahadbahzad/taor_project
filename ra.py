@@ -1,10 +1,4 @@
-# THIS MODULE CONTAINS THE CODE FOR RUNNING STOCHASTIC ALGORITHMS.
-# Currently this only contains a stochastic implementation of the recursive alg.
-
-# IMPORTS
 import xpress as xp
-# xp.init('C:/Program Files/xpressmp/bin/xpauth_personal.xpr') # For licensing.
-
 import pandas as pd
 import math
 import networkx as nx
