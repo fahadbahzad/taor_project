@@ -22,7 +22,7 @@ Additionally, the repository includes example files to guide users in running th
 - **`stochastic_results_assessment.ipynb`**: From stochastic_results.csv to evaluate the performance of the stochastic Recursive Algorithm.
 
 ### Datasets
-- **`Data/`**: This folder contains the datasets generated for testing and evaluation purposes.
+- **`data/`**: This folder contains the datasets generated for testing and evaluation purposes.
 
 ## Getting Started
 
