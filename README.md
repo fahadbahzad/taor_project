@@ -13,7 +13,7 @@ Additionally, the repository includes example files to guide users in running th
 - **`pctsp.py`**: Implements the PC-TSP approach utilizing solver callbacks for efficient computation.
 - **`ra.py`**: Implements the Recursive Algorithm including an optional stochastic approach.
 
-### Example Notebooks
+### Notebooks
 - **`pctsp_example.ipynb`**: Demonstrates how to run the PC-TSP algorithm module.
 - **`ra_example.ipynb`**: Demonstrates how to run the Recursive Algorithm module.
 - **`timing_results.ipynb`**: Provides the code for reproducing timing results from solving the 25 datasets in the `data/` folder.
